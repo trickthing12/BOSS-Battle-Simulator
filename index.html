@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Soul-Like Architect v5.0 (Groggy System)</title>
+    <title>Soul-Like Architect v5.1 (Hit & Dodge)</title>
     <style>
         :root {
             --bg-color: #121212;
@@ -13,7 +13,8 @@
             --win-color: #15803d;
             --attr-color: #3b82f6;
             --crit-color: #ffd700;
-            --poise-color: #f97316; /* Orange for Stagger */
+            --poise-color: #f97316;
+            --miss-color: #9ca3af;
         }
 
         body {
@@ -70,14 +71,14 @@
         /* Log Colors */
         .log-reaction { color: #60a5fa; font-weight: bold; }
         .log-crit { color: var(--crit-color); font-weight: bold; }
-        .log-groggy { color: var(--poise-color); font-weight: bold; text-shadow: 0 0 5px red; }
-        .log-recover { color: #4ade80; font-style: italic; }
+        .log-groggy { color: var(--poise-color); font-weight: bold; }
+        .log-miss { color: var(--miss-color); font-style: italic; }
     </style>
 </head>
 <body>
 
-    <h1>소울 라이크 보스 전투 시뮬레이터</h1>
-    <h3 style="color:#888; margin-top:-10px;"></h3>
+    <h1>Soul-Like Architect v5.1</h1>
+    <h3 style="color:#888; margin-top:-10px;">Full Combat System (Hit/Dodge/Poise)</h3>
 
     <div class="toolbar">
         <input type="file" id="load-file" style="display: none;" accept=".json" onchange="loadConfig(this)">
@@ -99,6 +100,12 @@
                     <input type="number" id="p-hp" value="1000">
                     <input type="number" id="p-atk" value="120">
                     <input type="number" id="p-def" value="40">
+                </div>
+            </div>
+            <div class="input-group"><label style="color:#fff">평타명중(%) / 회피율(%)</label>
+                <div>
+                    <input type="number" id="p-hit" value="95">
+                    <input type="number" id="p-dodge" value="20">
                 </div>
             </div>
             <div class="input-group"><label style="color:var(--crit-color)">Crit Rate(%) / Dmg(x)</label>
@@ -138,16 +145,21 @@
                     <input type="number" id="b-def" value="60">
                 </div>
             </div>
+            <div class="input-group"><label style="color:#fff">평타명중(%) / 회피율(%)</label>
+                <div>
+                    <input type="number" id="b-hit" value="90">
+                    <input type="number" id="b-dodge" value="5">
+                </div>
+            </div>
             <div class="input-group"><label style="color:var(--poise-color)">강직도(Max) / 회복(s)</label>
                 <div>
-                    <input type="number" id="b-poise" value="100" placeholder="Max">
-                    <input type="number" id="b-groggy-time" value="4.0" placeholder="Sec">
+                    <input type="number" id="b-poise" value="100">
+                    <input type="number" id="b-groggy-time" value="4.0">
                 </div>
             </div>
             <div class="input-group"><label style="color:var(--poise-color)">그로기 피해 배율(x)</label>
                 <input type="number" id="b-groggy-mult" value="2.0" step="0.1">
             </div>
-
             <div class="input-group"><label style="color:var(--crit-color)">Crit Rate(%) / Dmg(x)</label>
                 <div>
                     <input type="number" id="b-crit-rate" value="10">
@@ -164,7 +176,6 @@
     </div>
 
     <div style="width:100%; max-width:1400px; margin-top:30px;">
-        
         <h3 style="border-bottom: 1px solid #444; padding-bottom: 5px;">🎬 단판 관전 (Visual & Graph)</h3>
         <button class="secondary" style="width:100%; margin-bottom:15px; padding:15px; font-size:1.1em;" onclick="runSingleBattle()">▶️ 전투 시작</button>
         
@@ -179,7 +190,7 @@
 
         <h3 style="border-bottom: 1px solid #444; padding-bottom: 5px;">📊 밸런스 데이터 분석</h3>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-            <span style="color:#aaa;">대량 시뮬레이션 (Poise 변수 포함)</span>
+            <span style="color:#aaa;">대량 시뮬레이션 (Hit/Dodge/Poise 포함)</span>
             <div class="input-group" style="gap:10px;">
                 <label style="font-size:1em; color:#fff;">반복 횟수:</label>
                 <input type="number" id="batch-count" value="100" style="width:100px; font-size:1em;">
@@ -233,22 +244,24 @@
             renderRules(); 
         }
 
-        // [Updated] 스킬 슬롯에 '강직도 피해(Poise Dmg)' 필드 추가
+        // [Updated] Add Hit Rate to Skill Slot
         function addSkillSlot(target, data=null) {
             counters[target+'_sk']++;
             const div = document.createElement('div');
             div.className = 'skill-slot';
             const costHtml = target==='p' ? `<div class="input-group"><label>Stamina</label><input type="number" class="s-cost" value="${data?data.cost:40}"></div>` : '';
-            // New: Poise Damage Input
             const poiseHtml = target==='p' ? `<div class="input-group"><label style="color:var(--poise-color)">Poise Dmg</label><input type="number" class="s-poise" value="${data?data.poise:20}"></div>` : '';
 
             div.innerHTML = `
                 <div><strong>Skill ${counters[target+'_sk']}</strong><button class="remove" onclick="this.parentElement.parentElement.remove()">X</button></div>
                 <div class="input-group"><label>Name</label><input type="text" class="s-name" value="${data?data.name:'Skill'}"></div>
-                <div class="input-group"><label>Dmg(%)</label><input type="number" class="s-dmg" value="${data?(data.dmg*100):150}"></div>
+                <div class="input-group"><label>Dmg(%) / Hit(%)</label>
+                    <div><input type="number" class="s-dmg" value="${data?(data.dmg*100):150}"> <input type="number" class="s-hit" value="${data?data.hit:95}"></div>
+                </div>
                 ${poiseHtml}
-                <div class="input-group"><label>Time(s)</label><input type="number" class="s-time" value="${data?data.time:1.5}"></div>
-                <div class="input-group"><label>CD(s)</label><input type="number" class="s-cd" value="${data?data.cd:5}"></div>
+                <div class="input-group"><label>Time(s) / CD(s)</label>
+                    <div><input type="number" class="s-time" value="${data?data.time:1.5}"> <input type="number" class="s-cd" value="${data?data.cd:5}"></div>
+                </div>
                 ${costHtml}
             `;
             document.getElementById(`${target}-skills`).appendChild(div);
@@ -264,7 +277,6 @@
         }
 
         // --- 1. Save & Load System ---
-
         function getSlotsData(target, type) {
             let data = [];
             if(type === 'skill') {
@@ -272,10 +284,11 @@
                     data.push({
                         name: s.querySelector('.s-name').value,
                         dmg: parseFloat(s.querySelector('.s-dmg').value)/100,
+                        hit: parseFloat(s.querySelector('.s-hit').value), // Save Hit
                         time: parseFloat(s.querySelector('.s-time').value),
                         cd: parseFloat(s.querySelector('.s-cd').value),
                         cost: target==='p' ? parseFloat(s.querySelector('.s-cost').value) : 0,
-                        poise: target==='p' ? parseFloat(s.querySelector('.s-poise').value) : 0 // Save Poise
+                        poise: target==='p' ? parseFloat(s.querySelector('.s-poise').value) : 0
                     });
                 });
             } else {
@@ -292,20 +305,22 @@
 
         function saveConfig() {
             const config = {
-                version: "5.0",
+                version: "5.1",
                 rules: globalRules,
                 batchCount: document.getElementById('batch-count').value,
                 player: {
                     hp: document.getElementById('p-hp').value,
                     atk: document.getElementById('p-atk').value,
                     def: document.getElementById('p-def').value,
+                    hit: document.getElementById('p-hit').value, // Save Hit
+                    dodge: document.getElementById('p-dodge').value, // Save Dodge
                     critRate: document.getElementById('p-crit-rate').value,
                     critDmg: document.getElementById('p-crit-dmg').value,
                     stamina: document.getElementById('p-stamina').value,
                     regen: document.getElementById('p-stamina-regen').value,
                     normTime: document.getElementById('p-normal-time').value,
                     normCost: document.getElementById('p-normal-cost').value,
-                    normPoise: document.getElementById('p-normal-poise').value, // Save
+                    normPoise: document.getElementById('p-normal-poise').value,
                     attrs: getSlotsData('p', 'attr'),
                     skills: getSlotsData('p', 'skill')
                 },
@@ -313,21 +328,22 @@
                     hp: document.getElementById('b-hp').value,
                     atk: document.getElementById('b-atk').value,
                     def: document.getElementById('b-def').value,
+                    hit: document.getElementById('b-hit').value, // Save Hit
+                    dodge: document.getElementById('b-dodge').value, // Save Dodge
                     critRate: document.getElementById('b-crit-rate').value,
                     critDmg: document.getElementById('b-crit-dmg').value,
                     normTime: document.getElementById('b-normal-time').value,
-                    poise: document.getElementById('b-poise').value, // Save
-                    groggyTime: document.getElementById('b-groggy-time').value, // Save
-                    groggyMult: document.getElementById('b-groggy-mult').value, // Save
+                    poise: document.getElementById('b-poise').value,
+                    groggyTime: document.getElementById('b-groggy-time').value,
+                    groggyMult: document.getElementById('b-groggy-mult').value,
                     attrs: getSlotsData('b', 'attr'),
                     skills: getSlotsData('b', 'skill')
                 }
             };
-
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(config, null, 2));
             const dlAnchor = document.createElement('a');
             dlAnchor.setAttribute("href", dataStr);
-            dlAnchor.setAttribute("download", "soul_combat_v5.json");
+            dlAnchor.setAttribute("download", "soul_combat_v5.1.json");
             document.body.appendChild(dlAnchor);
             dlAnchor.click();
             dlAnchor.remove();
@@ -340,7 +356,6 @@
             reader.onload = function(e) {
                 try {
                     const cfg = JSON.parse(e.target.result);
-                    
                     globalRules = cfg.rules || []; renderRules();
                     document.getElementById('batch-count').value = cfg.batchCount || 100;
 
@@ -348,26 +363,29 @@
                     document.getElementById('p-hp').value = p.hp;
                     document.getElementById('p-atk').value = p.atk;
                     document.getElementById('p-def').value = p.def;
+                    document.getElementById('p-hit').value = p.hit || 95; // Load
+                    document.getElementById('p-dodge').value = p.dodge || 10; // Load
                     document.getElementById('p-crit-rate').value = p.critRate;
                     document.getElementById('p-crit-dmg').value = p.critDmg;
                     document.getElementById('p-stamina').value = p.stamina;
                     document.getElementById('p-stamina-regen').value = p.regen;
                     document.getElementById('p-normal-time').value = p.normTime;
                     document.getElementById('p-normal-cost').value = p.normCost;
-                    document.getElementById('p-normal-poise').value = p.normPoise || 10; // Load
+                    document.getElementById('p-normal-poise').value = p.normPoise || 10;
 
                     const b = cfg.boss;
                     document.getElementById('b-hp').value = b.hp;
                     document.getElementById('b-atk').value = b.atk;
                     document.getElementById('b-def').value = b.def;
+                    document.getElementById('b-hit').value = b.hit || 90; // Load
+                    document.getElementById('b-dodge').value = b.dodge || 5; // Load
                     document.getElementById('b-crit-rate').value = b.critRate;
                     document.getElementById('b-crit-dmg').value = b.critDmg;
                     document.getElementById('b-normal-time').value = b.normTime;
-                    document.getElementById('b-poise').value = b.poise || 100; // Load
-                    document.getElementById('b-groggy-time').value = b.groggyTime || 4.0; // Load
-                    document.getElementById('b-groggy-mult').value = b.groggyMult || 2.0; // Load
+                    document.getElementById('b-poise').value = b.poise || 100;
+                    document.getElementById('b-groggy-time').value = b.groggyTime || 4.0;
+                    document.getElementById('b-groggy-mult').value = b.groggyMult || 2.0;
 
-                    // Clear & Restore Slots
                     document.getElementById('p-attrs').innerHTML = '<h4 style="color:var(--attr-color)">Attr Slots</h4>';
                     document.getElementById('p-skills').innerHTML = '<h4>Skill Slots</h4>';
                     document.getElementById('b-attrs').innerHTML = '<h4 style="color:var(--attr-color)">Attr Slots</h4>';
@@ -389,7 +407,7 @@
             input.value = '';
         }
 
-        // --- 2. Simulation Engine (Updated for Poise) ---
+        // --- 2. Simulation Engine (Hit/Dodge/Poise) ---
         class SimEntity {
             constructor(type) {
                 this.type = type;
@@ -397,6 +415,8 @@
                 this.maxHp = this.hp;
                 this.atk = parseFloat(document.getElementById(`${type}-atk`).value);
                 this.def = parseFloat(document.getElementById(`${type}-def`).value);
+                this.hitRate = parseFloat(document.getElementById(`${type}-hit`).value); // Global Hit
+                this.dodge = parseFloat(document.getElementById(`${type}-dodge`).value); // Global Dodge
                 this.critRate = parseFloat(document.getElementById(`${type}-crit-rate`).value);
                 this.critDmg = parseFloat(document.getElementById(`${type}-crit-dmg`).value);
                 this.normalTime = parseFloat(document.getElementById(`${type}-normal-time`)?.value || 1.5);
@@ -410,10 +430,11 @@
                     this.skills.push({ 
                         name: s.querySelector('.s-name').value, 
                         dmg: s.querySelector('.s-dmg').value/100, 
+                        hit: parseFloat(s.querySelector('.s-hit').value), // Skill Hit
                         time: parseFloat(s.querySelector('.s-time').value), 
                         cd: parseFloat(s.querySelector('.s-cd').value), 
                         cost: type==='p'?parseFloat(s.querySelector('.s-cost').value):0, 
-                        poise: type==='p'?parseFloat(s.querySelector('.s-poise').value):0, // Poise Dmg
+                        poise: type==='p'?parseFloat(s.querySelector('.s-poise').value):0,
                         readyAt: 0 
                     });
                 });
@@ -423,7 +444,7 @@
                     this.maxStamina = this.stamina;
                     this.regen = parseFloat(document.getElementById('p-stamina-regen').value);
                     this.normalCost = parseFloat(document.getElementById('p-normal-cost').value);
-                    this.normalPoise = parseFloat(document.getElementById('p-normal-poise').value); // Normal Poise Dmg
+                    this.normalPoise = parseFloat(document.getElementById('p-normal-poise').value);
                 }
 
                 if(type==='b') {
@@ -461,18 +482,14 @@
                     history.bHp.push(Math.max(0, b.hp));
                 }
                 
-                // --- Stamina Regen ---
                 p.stamina = Math.min(p.maxStamina, p.stamina + (p.regen * tick));
 
-                // --- Boss Groggy Logic ---
                 if(b.isGroggy) {
-                    // Check if recovered
                     if(time >= b.groggyEndTimer) {
                         b.isGroggy = false;
                         b.currentPoise = b.maxPoise;
                         if(logging) history.log.push(`[${time.toFixed(1)}s] <span class="log-recover">Boss Recovered from Groggy!</span>`);
                     }
-                    // While groggy, Boss does NOT attack (busyUntil updated to keep him stuck)
                     b.busyUntil = Math.max(b.busyUntil, time + tick); 
                 }
                 
@@ -489,43 +506,53 @@
                         let cast = skill ? skill.time : p.normalTime;
                         let dmgMod = skill ? skill.dmg : 1.0;
                         let name = skill ? skill.name : '평타';
-                        let poiseDmg = skill ? skill.poise : p.normalPoise; // New
+                        let poiseDmg = skill ? skill.poise : p.normalPoise;
+                        // NEW: Hit Rate Check
+                        let hitChance = skill ? skill.hit : p.hitRate;
 
                         p.stamina -= cost;
                         p.busyUntil = time + cast;
                         if(skill) skill.readyAt = time + skill.cd;
 
-                        let base = Math.max((p.atk*dmgMod)-b.def, p.atk*0.05);
-                        let react = calculateReaction(p, b);
-                        let final = base * react.mult;
-                        let isCrit = Math.random()*100 < p.critRate;
-                        if(isCrit) final *= p.critDmg;
+                        // 1. Check Hit
+                        if(Math.random() * 100 > hitChance) {
+                             if(logging) history.log.push(`[${time.toFixed(1)}s] P.${name}: <span class="log-miss">MISS!</span>`);
+                        } 
+                        // 2. Check Dodge
+                        else if(Math.random() * 100 < b.dodge) {
+                             if(logging) history.log.push(`[${time.toFixed(1)}s] P.${name}: <span class="log-miss">Boss DODGED!</span>`);
+                        } 
+                        // 3. HIT Process
+                        else {
+                            let base = Math.max((p.atk*dmgMod)-b.def, p.atk*0.05);
+                            let react = calculateReaction(p, b);
+                            let final = base * react.mult;
+                            let isCrit = Math.random()*100 < p.critRate;
+                            if(isCrit) final *= p.critDmg;
 
-                        // [Updated] Apply Groggy Multiplier
-                        let groggyText = "";
-                        if(b.isGroggy) {
-                            final *= b.groggyMult;
-                            groggyText = `[GROGGY x${b.groggyMult}]`;
-                        }
-
-                        // [Updated] Apply Poise Damage
-                        if(!b.isGroggy) {
-                            b.currentPoise -= poiseDmg;
-                            if(b.currentPoise <= 0) {
-                                b.isGroggy = true;
-                                b.groggyEndTimer = time + b.groggyTime;
-                                b.busyUntil = b.groggyEndTimer; // Stun boss
-                                if(logging) history.log.push(`[${time.toFixed(1)}s] <span class="log-groggy">BOSS STAGGERED! (Groggy for ${b.groggyTime}s)</span>`);
+                            let groggyText = "";
+                            if(b.isGroggy) {
+                                final *= b.groggyMult;
+                                groggyText = `[GROGGY x${b.groggyMult}]`;
                             }
+
+                            if(!b.isGroggy) {
+                                b.currentPoise -= poiseDmg;
+                                if(b.currentPoise <= 0) {
+                                    b.isGroggy = true;
+                                    b.groggyEndTimer = time + b.groggyTime;
+                                    b.busyUntil = b.groggyEndTimer;
+                                    if(logging) history.log.push(`[${time.toFixed(1)}s] <span class="log-groggy">BOSS STAGGERED! (Groggy for ${b.groggyTime}s)</span>`);
+                                }
+                            }
+                            
+                            b.hp -= Math.floor(final);
+                            if(logging) history.log.push(`[${time.toFixed(1)}s] P.${name}: ${isCrit?'CRIT!':''} ${Math.floor(final)} ${react.log} ${groggyText}`);
                         }
-                        
-                        b.hp -= Math.floor(final);
-                        if(logging) history.log.push(`[${time.toFixed(1)}s] P.${name}: ${isCrit?'CRIT!':''} ${Math.floor(final)} ${react.log} ${groggyText}`);
                     }
                 }
 
                 // --- Boss Action ---
-                // Boss only acts if NOT Groggy
                 if(time >= b.busyUntil && b.hp > 0 && !b.isGroggy) {
                     let action = null;
                     let readySkills = b.skills.filter(s => time >= s.readyAt);
@@ -536,18 +563,31 @@
                     let cast = skill ? skill.time : b.normalTime;
                     let dmgMod = skill ? skill.dmg : 1.0;
                     let name = skill ? skill.name : '평타';
+                    // New: Boss Hit Rate Check
+                    let hitChance = skill ? skill.hit : b.hitRate;
 
                     b.busyUntil = time + cast;
                     if(skill) skill.readyAt = time + skill.cd;
 
-                    let base = Math.max((b.atk*dmgMod)-p.def, b.atk*0.05);
-                    let react = calculateReaction(b, p);
-                    let final = base * react.mult;
-                    let isCrit = Math.random()*100 < b.critRate;
-                    if(isCrit) final *= b.critDmg;
+                    // 1. Check Hit
+                    if(Math.random() * 100 > hitChance) {
+                        if(logging) history.log.push(`[${time.toFixed(1)}s] B.${name}: <span class="log-miss">MISS!</span>`);
+                    }
+                    // 2. Check Dodge
+                    else if(Math.random() * 100 < p.dodge) {
+                        if(logging) history.log.push(`[${time.toFixed(1)}s] B.${name}: <span class="log-miss">Player DODGED!</span>`);
+                    }
+                    // 3. HIT Process
+                    else {
+                        let base = Math.max((b.atk*dmgMod)-p.def, b.atk*0.05);
+                        let react = calculateReaction(b, p);
+                        let final = base * react.mult;
+                        let isCrit = Math.random()*100 < b.critRate;
+                        if(isCrit) final *= b.critDmg;
 
-                    p.hp -= Math.floor(final);
-                    if(logging) history.log.push(`[${time.toFixed(1)}s] B.${name}: ${isCrit?'CRIT!':''} ${Math.floor(final)} ${react.log}`);
+                        p.hp -= Math.floor(final);
+                        if(logging) history.log.push(`[${time.toFixed(1)}s] B.${name}: ${isCrit?'CRIT!':''} ${Math.floor(final)} ${react.log}`);
+                    }
                 }
                 time += tick;
             }
@@ -647,7 +687,6 @@
         }
 
         window.onload = function() {
-            // Default Init
             globalRules = [{atk:'불',def:'풀'}, {atk:'불',def:'얼음'}, {atk:'물',def:'불'}, {atk:'풀',def:'물'}, {atk:'신성',def:'어둠'}];
             renderRules();
             addAttrSlot('p'); addAttrSlot('b'); addAttrSlot('b');
