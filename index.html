@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Soul-Like Architect v5.1 (Hit & Dodge)</title>
+    <title>Soul-Like Architect v5.2 (Stamina Logic)</title>
     <style>
         :root {
             --bg-color: #121212;
@@ -73,12 +73,13 @@
         .log-crit { color: var(--crit-color); font-weight: bold; }
         .log-groggy { color: var(--poise-color); font-weight: bold; }
         .log-miss { color: var(--miss-color); font-style: italic; }
+        .log-fail { color: #ef4444; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <h1>보스 전투 시뮬레이터</h1>
-    <h3 style="color:#888; margin-top:-10px;">\</h3>
+    <h1>보스 전투 시뮬레이터 v5.2</h1>
+    <h3 style="color:#888; margin-top:-10px;">with Advanced Stamina Mechanics</h3>
 
     <div class="toolbar">
         <input type="file" id="load-file" style="display: none;" accept=".json" onchange="loadConfig(this)">
@@ -105,7 +106,7 @@
             <div class="input-group"><label style="color:#fff">평타명중(%) / 회피율(%)</label>
                 <div>
                     <input type="number" id="p-hit" value="95">
-                    <input type="number" id="p-dodge" value="20">
+                    <input type="number" id="p-dodge" value="40">
                 </div>
             </div>
             <div class="input-group"><label style="color:var(--crit-color)">Crit Rate(%) / Dmg(x)</label>
@@ -114,12 +115,20 @@
                     <input type="number" id="p-crit-dmg" value="1.5" step="0.1">
                 </div>
             </div>
-            <div class="input-group"><label>Stamina / Regen</label>
+            <div class="input-group"><label>Stamina / Regen(per sec)</label>
                 <div>
                     <input type="number" id="p-stamina" value="150">
-                    <input type="number" id="p-stamina-regen" value="20">
+                    <input type="number" id="p-stamina-regen" value="30">
                 </div>
             </div>
+            <div class="input-group" style="border:1px solid #555; padding:5px; border-radius:4px; margin:5px 0;">
+                <label style="color:#4ade80">회피 소모 / 회복지연(s)</label>
+                <div>
+                    <input type="number" id="p-dodge-cost" value="25" style="color:#4ade80">
+                    <input type="number" id="p-regen-delay" value="1.0" step="0.1" style="color:#4ade80">
+                </div>
+            </div>
+            
             <div class="input-group"><label>평타(초/소모)</label>
                 <div>
                     <input type="number" id="p-normal-time" value="0.8">
@@ -190,7 +199,7 @@
 
         <h3 style="border-bottom: 1px solid #444; padding-bottom: 5px;">📊 밸런스 데이터 분석</h3>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-            <span style="color:#aaa;">대량 시뮬레이션 (Hit/Dodge/Poise 포함)</span>
+            <span style="color:#aaa;">대량 시뮬레이션 (Hit/Dodge/Poise/Stamina 포함)</span>
             <div class="input-group" style="gap:10px;">
                 <label style="font-size:1em; color:#fff;">반복 횟수:</label>
                 <input type="number" id="batch-count" value="100" style="width:100px; font-size:1em;">
@@ -244,7 +253,6 @@
             renderRules(); 
         }
 
-        // [Updated] Add Hit Rate to Skill Slot
         function addSkillSlot(target, data=null) {
             counters[target+'_sk']++;
             const div = document.createElement('div');
@@ -284,7 +292,7 @@
                     data.push({
                         name: s.querySelector('.s-name').value,
                         dmg: parseFloat(s.querySelector('.s-dmg').value)/100,
-                        hit: parseFloat(s.querySelector('.s-hit').value), // Save Hit
+                        hit: parseFloat(s.querySelector('.s-hit').value),
                         time: parseFloat(s.querySelector('.s-time').value),
                         cd: parseFloat(s.querySelector('.s-cd').value),
                         cost: target==='p' ? parseFloat(s.querySelector('.s-cost').value) : 0,
@@ -305,19 +313,23 @@
 
         function saveConfig() {
             const config = {
-                version: "5.1",
+                version: "5.2",
                 rules: globalRules,
                 batchCount: document.getElementById('batch-count').value,
                 player: {
                     hp: document.getElementById('p-hp').value,
                     atk: document.getElementById('p-atk').value,
                     def: document.getElementById('p-def').value,
-                    hit: document.getElementById('p-hit').value, // Save Hit
-                    dodge: document.getElementById('p-dodge').value, // Save Dodge
+                    hit: document.getElementById('p-hit').value,
+                    dodge: document.getElementById('p-dodge').value,
                     critRate: document.getElementById('p-crit-rate').value,
                     critDmg: document.getElementById('p-crit-dmg').value,
                     stamina: document.getElementById('p-stamina').value,
                     regen: document.getElementById('p-stamina-regen').value,
+                    // New Save Fields
+                    dodgeCost: document.getElementById('p-dodge-cost').value,
+                    regenDelay: document.getElementById('p-regen-delay').value,
+                    
                     normTime: document.getElementById('p-normal-time').value,
                     normCost: document.getElementById('p-normal-cost').value,
                     normPoise: document.getElementById('p-normal-poise').value,
@@ -328,8 +340,8 @@
                     hp: document.getElementById('b-hp').value,
                     atk: document.getElementById('b-atk').value,
                     def: document.getElementById('b-def').value,
-                    hit: document.getElementById('b-hit').value, // Save Hit
-                    dodge: document.getElementById('b-dodge').value, // Save Dodge
+                    hit: document.getElementById('b-hit').value,
+                    dodge: document.getElementById('b-dodge').value,
                     critRate: document.getElementById('b-crit-rate').value,
                     critDmg: document.getElementById('b-crit-dmg').value,
                     normTime: document.getElementById('b-normal-time').value,
@@ -343,7 +355,7 @@
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(config, null, 2));
             const dlAnchor = document.createElement('a');
             dlAnchor.setAttribute("href", dataStr);
-            dlAnchor.setAttribute("download", "soul_combat_v5.1.json");
+            dlAnchor.setAttribute("download", "soul_combat_v5.2.json");
             document.body.appendChild(dlAnchor);
             dlAnchor.click();
             dlAnchor.remove();
@@ -363,12 +375,17 @@
                     document.getElementById('p-hp').value = p.hp;
                     document.getElementById('p-atk').value = p.atk;
                     document.getElementById('p-def').value = p.def;
-                    document.getElementById('p-hit').value = p.hit || 95; // Load
-                    document.getElementById('p-dodge').value = p.dodge || 10; // Load
+                    document.getElementById('p-hit').value = p.hit || 95;
+                    document.getElementById('p-dodge').value = p.dodge || 10;
                     document.getElementById('p-crit-rate').value = p.critRate;
                     document.getElementById('p-crit-dmg').value = p.critDmg;
                     document.getElementById('p-stamina').value = p.stamina;
                     document.getElementById('p-stamina-regen').value = p.regen;
+                    
+                    // Load New Fields with defaults
+                    document.getElementById('p-dodge-cost').value = p.dodgeCost || 25;
+                    document.getElementById('p-regen-delay').value = p.regenDelay || 1.0;
+
                     document.getElementById('p-normal-time').value = p.normTime;
                     document.getElementById('p-normal-cost').value = p.normCost;
                     document.getElementById('p-normal-poise').value = p.normPoise || 10;
@@ -377,8 +394,8 @@
                     document.getElementById('b-hp').value = b.hp;
                     document.getElementById('b-atk').value = b.atk;
                     document.getElementById('b-def').value = b.def;
-                    document.getElementById('b-hit').value = b.hit || 90; // Load
-                    document.getElementById('b-dodge').value = b.dodge || 5; // Load
+                    document.getElementById('b-hit').value = b.hit || 90;
+                    document.getElementById('b-dodge').value = b.dodge || 5;
                     document.getElementById('b-crit-rate').value = b.critRate;
                     document.getElementById('b-crit-dmg').value = b.critDmg;
                     document.getElementById('b-normal-time').value = b.normTime;
@@ -407,7 +424,7 @@
             input.value = '';
         }
 
-        // --- 2. Simulation Engine (Hit/Dodge/Poise) ---
+        // --- 2. Simulation Engine ---
         class SimEntity {
             constructor(type) {
                 this.type = type;
@@ -415,8 +432,8 @@
                 this.maxHp = this.hp;
                 this.atk = parseFloat(document.getElementById(`${type}-atk`).value);
                 this.def = parseFloat(document.getElementById(`${type}-def`).value);
-                this.hitRate = parseFloat(document.getElementById(`${type}-hit`).value); // Global Hit
-                this.dodge = parseFloat(document.getElementById(`${type}-dodge`).value); // Global Dodge
+                this.hitRate = parseFloat(document.getElementById(`${type}-hit`).value);
+                this.dodge = parseFloat(document.getElementById(`${type}-dodge`).value);
                 this.critRate = parseFloat(document.getElementById(`${type}-crit-rate`).value);
                 this.critDmg = parseFloat(document.getElementById(`${type}-crit-dmg`).value);
                 this.normalTime = parseFloat(document.getElementById(`${type}-normal-time`)?.value || 1.5);
@@ -430,7 +447,7 @@
                     this.skills.push({ 
                         name: s.querySelector('.s-name').value, 
                         dmg: s.querySelector('.s-dmg').value/100, 
-                        hit: parseFloat(s.querySelector('.s-hit').value), // Skill Hit
+                        hit: parseFloat(s.querySelector('.s-hit').value),
                         time: parseFloat(s.querySelector('.s-time').value), 
                         cd: parseFloat(s.querySelector('.s-cd').value), 
                         cost: type==='p'?parseFloat(s.querySelector('.s-cost').value):0, 
@@ -445,6 +462,11 @@
                     this.regen = parseFloat(document.getElementById('p-stamina-regen').value);
                     this.normalCost = parseFloat(document.getElementById('p-normal-cost').value);
                     this.normalPoise = parseFloat(document.getElementById('p-normal-poise').value);
+                    
+                    // NEW: Stamina Delay & Dodge Cost
+                    this.dodgeCost = parseFloat(document.getElementById('p-dodge-cost').value);
+                    this.regenDelay = parseFloat(document.getElementById('p-regen-delay').value);
+                    this.lastStaminaUseTime = -999; // Initialize to allow immediate regen
                 }
 
                 if(type==='b') {
@@ -472,17 +494,22 @@
 
         function simulateBattle(logging = false) {
             const p = new SimEntity('p'); const b = new SimEntity('b');
-            let time = 0; const tick = 0.2; const limit = 300;
+            let time = 0; const tick = 0.1; // More precise tick for regen logic
+            const limit = 300;
             const history = { time:[], pHp:[], bHp:[], log:[] };
             
             while(p.hp > 0 && b.hp > 0 && time < limit) {
-                if(time % 1.0 < tick) {
+                // Record state roughly every 1s (modulo) or slightly more frequent for graph
+                if(Math.abs(time % 1.0) < 0.05) { 
                     history.time.push(time.toFixed(1));
                     history.pHp.push(Math.max(0, p.hp));
                     history.bHp.push(Math.max(0, b.hp));
                 }
                 
-                p.stamina = Math.min(p.maxStamina, p.stamina + (p.regen * tick));
+                // --- NEW: Stamina Regen Logic (Delay Check) ---
+                if (time - p.lastStaminaUseTime >= p.regenDelay) {
+                    p.stamina = Math.min(p.maxStamina, p.stamina + (p.regen * tick));
+                }
 
                 if(b.isGroggy) {
                     if(time >= b.groggyEndTimer) {
@@ -507,23 +534,19 @@
                         let dmgMod = skill ? skill.dmg : 1.0;
                         let name = skill ? skill.name : '평타';
                         let poiseDmg = skill ? skill.poise : p.normalPoise;
-                        // NEW: Hit Rate Check
                         let hitChance = skill ? skill.hit : p.hitRate;
 
                         p.stamina -= cost;
+                        p.lastStaminaUseTime = time; // Mark stamina usage
                         p.busyUntil = time + cast;
                         if(skill) skill.readyAt = time + skill.cd;
 
-                        // 1. Check Hit
+                        // Attack Logic
                         if(Math.random() * 100 > hitChance) {
                              if(logging) history.log.push(`[${time.toFixed(1)}s] P.${name}: <span class="log-miss">MISS!</span>`);
-                        } 
-                        // 2. Check Dodge
-                        else if(Math.random() * 100 < b.dodge) {
+                        } else if(Math.random() * 100 < b.dodge) {
                              if(logging) history.log.push(`[${time.toFixed(1)}s] P.${name}: <span class="log-miss">Boss DODGED!</span>`);
-                        } 
-                        // 3. HIT Process
-                        else {
+                        } else {
                             let base = Math.max((p.atk*dmgMod)-b.def, p.atk*0.05);
                             let react = calculateReaction(p, b);
                             let final = base * react.mult;
@@ -563,22 +586,41 @@
                     let cast = skill ? skill.time : b.normalTime;
                     let dmgMod = skill ? skill.dmg : 1.0;
                     let name = skill ? skill.name : '평타';
-                    // New: Boss Hit Rate Check
                     let hitChance = skill ? skill.hit : b.hitRate;
 
                     b.busyUntil = time + cast;
                     if(skill) skill.readyAt = time + skill.cd;
 
-                    // 1. Check Hit
+                    let isHit = false;
+                    let isDodge = false;
+                    let dodgeFailLog = "";
+
+                    // 1. Check Hit (Accuracy)
                     if(Math.random() * 100 > hitChance) {
                         if(logging) history.log.push(`[${time.toFixed(1)}s] B.${name}: <span class="log-miss">MISS!</span>`);
                     }
-                    // 2. Check Dodge
-                    else if(Math.random() * 100 < p.dodge) {
-                        if(logging) history.log.push(`[${time.toFixed(1)}s] B.${name}: <span class="log-miss">Player DODGED!</span>`);
-                    }
-                    // 3. HIT Process
+                    // 2. Check Dodge (vs Player)
                     else {
+                        // Dodge Roll Chance
+                        if(Math.random() * 100 < p.dodge) {
+                            // NEW: Check Stamina for Dodge
+                            if(p.stamina >= p.dodgeCost) {
+                                p.stamina -= p.dodgeCost;
+                                p.lastStaminaUseTime = time; // Dodge consumes stamina -> delays regen
+                                isDodge = true;
+                                if(logging) history.log.push(`[${time.toFixed(1)}s] B.${name}: <span class="log-miss">Player DODGED! (Stamina -${p.dodgeCost})</span>`);
+                            } else {
+                                // Dodge Failed due to low stamina
+                                isHit = true;
+                                dodgeFailLog = "(Dodge Failed: No Stamina)";
+                            }
+                        } else {
+                            isHit = true;
+                        }
+                    }
+
+                    // 3. HIT Process
+                    if(isHit) {
                         let base = Math.max((b.atk*dmgMod)-p.def, b.atk*0.05);
                         let react = calculateReaction(b, p);
                         let final = base * react.mult;
@@ -586,7 +628,9 @@
                         if(isCrit) final *= b.critDmg;
 
                         p.hp -= Math.floor(final);
-                        if(logging) history.log.push(`[${time.toFixed(1)}s] B.${name}: ${isCrit?'CRIT!':''} ${Math.floor(final)} ${react.log}`);
+                        if(logging) {
+                            history.log.push(`[${time.toFixed(1)}s] B.${name}: ${isCrit?'CRIT!':''} ${Math.floor(final)} ${react.log} <span class="log-fail">${dodgeFailLog}</span>`);
+                        }
                     }
                 }
                 time += tick;
