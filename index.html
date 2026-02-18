@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Soul-Like Architect v4.5 (Final + Save/Load)</title>
+    <title>Soul-Like Architect v5.0 (Groggy System)</title>
     <style>
         :root {
             --bg-color: #121212;
@@ -13,6 +13,7 @@
             --win-color: #15803d;
             --attr-color: #3b82f6;
             --crit-color: #ffd700;
+            --poise-color: #f97316; /* Orange for Stagger */
         }
 
         body {
@@ -52,9 +53,8 @@
         .stat-val { font-size: 1.5em; font-weight: bold; margin-bottom: 5px; }
         .stat-label { font-size: 0.8em; color: #aaa; }
 
-        /* Graph & Tooltip */
         .battle-arena { width: 100%; max-width: 1400px; margin-top: 10px; position: relative; }
-        #log-window { height: 200px; overflow-y: auto; background: #000; border: 1px solid var(--accent-color); padding: 10px; font-family: monospace; font-size: 0.9em; margin-bottom: 10px; }
+        #log-window { height: 250px; overflow-y: auto; background: #000; border: 1px solid var(--accent-color); padding: 10px; font-family: monospace; font-size: 0.9em; margin-bottom: 10px; }
         
         .graph-wrapper { position: relative; width: 100%; height: 350px; background: #0a0a0a; border: 1px solid #333; cursor: crosshair; }
         canvas { width: 100%; height: 100%; display: block; }
@@ -66,18 +66,23 @@
 
         .toolbar { width:100%; max-width:1400px; display:flex; justify-content:flex-end; margin-bottom:10px; }
         .section-divider { width: 100%; height: 2px; background: #333; margin: 40px 0; }
+        
+        /* Log Colors */
         .log-reaction { color: #60a5fa; font-weight: bold; }
         .log-crit { color: var(--crit-color); font-weight: bold; }
+        .log-groggy { color: var(--poise-color); font-weight: bold; text-shadow: 0 0 5px red; }
+        .log-recover { color: #4ade80; font-style: italic; }
     </style>
 </head>
 <body>
 
     <h1>소울 라이크 보스 전투 시뮬레이터</h1>
+    <h3 style="color:#888; margin-top:-10px;">with Groggy & Poise System</h3>
 
     <div class="toolbar">
         <input type="file" id="load-file" style="display: none;" accept=".json" onchange="loadConfig(this)">
-        <button class="file-btn" onclick="saveConfig()">💾 설정 저장 (Save JSON)</button>
-        <button class="file-btn" onclick="document.getElementById('load-file').click()">📂 설정 불러오기 (Load JSON)</button>
+        <button class="file-btn" onclick="saveConfig()">💾 설정 저장 (Save)</button>
+        <button class="file-btn" onclick="document.getElementById('load-file').click()">📂 설정 불러오기 (Load)</button>
     </div>
 
     <div class="panel" style="width:100%; max-width:1400px; margin-bottom:20px;">
@@ -114,6 +119,9 @@
                     <input type="number" id="p-normal-cost" value="20">
                 </div>
             </div>
+            <div class="input-group"><label style="color:var(--poise-color)">평타 강직도 피해</label>
+                <input type="number" id="p-normal-poise" value="10">
+            </div>
             <hr>
             <div class="slot-container" id="p-attrs"><h4 style="color:var(--attr-color)">Attr Slots</h4></div>
             <button class="attr-btn" onclick="addAttrSlot('p')">+ 속성 추가</button>
@@ -125,11 +133,21 @@
             <h2>☠️ Boss</h2>
             <div class="input-group"><label>HP / ATK / DEF</label>
                 <div>
-                    <input type="number" id="b-hp" value="6000">
+                    <input type="number" id="b-hp" value="8000">
                     <input type="number" id="b-atk" value="280">
                     <input type="number" id="b-def" value="60">
                 </div>
             </div>
+            <div class="input-group"><label style="color:var(--poise-color)">강직도(Max) / 회복(s)</label>
+                <div>
+                    <input type="number" id="b-poise" value="100" placeholder="Max">
+                    <input type="number" id="b-groggy-time" value="4.0" placeholder="Sec">
+                </div>
+            </div>
+            <div class="input-group"><label style="color:var(--poise-color)">그로기 피해 배율(x)</label>
+                <input type="number" id="b-groggy-mult" value="2.0" step="0.1">
+            </div>
+
             <div class="input-group"><label style="color:var(--crit-color)">Crit Rate(%) / Dmg(x)</label>
                 <div>
                     <input type="number" id="b-crit-rate" value="10">
@@ -159,9 +177,9 @@
 
         <div class="section-divider"></div>
 
-        <h3 style="border-bottom: 1px solid #444; padding-bottom: 5px;">📊 밸런스 데이터 분석 (Data Only)</h3>
+        <h3 style="border-bottom: 1px solid #444; padding-bottom: 5px;">📊 밸런스 데이터 분석</h3>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-            <span style="color:#aaa;">대량 시뮬레이션을 통해 승률과 밸런스를 검증합니다.</span>
+            <span style="color:#aaa;">대량 시뮬레이션 (Poise 변수 포함)</span>
             <div class="input-group" style="gap:10px;">
                 <label style="font-size:1em; color:#fff;">반복 횟수:</label>
                 <input type="number" id="batch-count" value="100" style="width:100px; font-size:1em;">
@@ -215,17 +233,27 @@
             renderRules(); 
         }
 
-        // [Updated] 데이터 주입 가능하도록 수정
+        // [Updated] 스킬 슬롯에 '강직도 피해(Poise Dmg)' 필드 추가
         function addSkillSlot(target, data=null) {
             counters[target+'_sk']++;
             const div = document.createElement('div');
             div.className = 'skill-slot';
             const costHtml = target==='p' ? `<div class="input-group"><label>Stamina</label><input type="number" class="s-cost" value="${data?data.cost:40}"></div>` : '';
-            div.innerHTML = `<div><strong>Skill ${counters[target+'_sk']}</strong><button class="remove" onclick="this.parentElement.parentElement.remove()">X</button></div><div class="input-group"><label>Name</label><input type="text" class="s-name" value="${data?data.name:'Skill'}"></div><div class="input-group"><label>Dmg(%)</label><input type="number" class="s-dmg" value="${data?(data.dmg*100):150}"></div><div class="input-group"><label>Time(s)</label><input type="number" class="s-time" value="${data?data.time:1.5}"></div><div class="input-group"><label>CD(s)</label><input type="number" class="s-cd" value="${data?data.cd:5}"></div>${costHtml}`;
+            // New: Poise Damage Input
+            const poiseHtml = target==='p' ? `<div class="input-group"><label style="color:var(--poise-color)">Poise Dmg</label><input type="number" class="s-poise" value="${data?data.poise:20}"></div>` : '';
+
+            div.innerHTML = `
+                <div><strong>Skill ${counters[target+'_sk']}</strong><button class="remove" onclick="this.parentElement.parentElement.remove()">X</button></div>
+                <div class="input-group"><label>Name</label><input type="text" class="s-name" value="${data?data.name:'Skill'}"></div>
+                <div class="input-group"><label>Dmg(%)</label><input type="number" class="s-dmg" value="${data?(data.dmg*100):150}"></div>
+                ${poiseHtml}
+                <div class="input-group"><label>Time(s)</label><input type="number" class="s-time" value="${data?data.time:1.5}"></div>
+                <div class="input-group"><label>CD(s)</label><input type="number" class="s-cd" value="${data?data.cd:5}"></div>
+                ${costHtml}
+            `;
             document.getElementById(`${target}-skills`).appendChild(div);
         }
 
-        // [Updated] 데이터 주입 가능하도록 수정
         function addAttrSlot(target, data=null) {
             counters[target+'_at']++;
             const div = document.createElement('div');
@@ -246,7 +274,8 @@
                         dmg: parseFloat(s.querySelector('.s-dmg').value)/100,
                         time: parseFloat(s.querySelector('.s-time').value),
                         cd: parseFloat(s.querySelector('.s-cd').value),
-                        cost: target==='p' ? parseFloat(s.querySelector('.s-cost').value) : 0
+                        cost: target==='p' ? parseFloat(s.querySelector('.s-cost').value) : 0,
+                        poise: target==='p' ? parseFloat(s.querySelector('.s-poise').value) : 0 // Save Poise
                     });
                 });
             } else {
@@ -263,6 +292,7 @@
 
         function saveConfig() {
             const config = {
+                version: "5.0",
                 rules: globalRules,
                 batchCount: document.getElementById('batch-count').value,
                 player: {
@@ -275,6 +305,7 @@
                     regen: document.getElementById('p-stamina-regen').value,
                     normTime: document.getElementById('p-normal-time').value,
                     normCost: document.getElementById('p-normal-cost').value,
+                    normPoise: document.getElementById('p-normal-poise').value, // Save
                     attrs: getSlotsData('p', 'attr'),
                     skills: getSlotsData('p', 'skill')
                 },
@@ -285,6 +316,9 @@
                     critRate: document.getElementById('b-crit-rate').value,
                     critDmg: document.getElementById('b-crit-dmg').value,
                     normTime: document.getElementById('b-normal-time').value,
+                    poise: document.getElementById('b-poise').value, // Save
+                    groggyTime: document.getElementById('b-groggy-time').value, // Save
+                    groggyMult: document.getElementById('b-groggy-mult').value, // Save
                     attrs: getSlotsData('b', 'attr'),
                     skills: getSlotsData('b', 'skill')
                 }
@@ -293,7 +327,7 @@
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(config, null, 2));
             const dlAnchor = document.createElement('a');
             dlAnchor.setAttribute("href", dataStr);
-            dlAnchor.setAttribute("download", "soul_combat_config.json");
+            dlAnchor.setAttribute("download", "soul_combat_v5.json");
             document.body.appendChild(dlAnchor);
             dlAnchor.click();
             dlAnchor.remove();
@@ -307,12 +341,9 @@
                 try {
                     const cfg = JSON.parse(e.target.result);
                     
-                    // Restore Global
-                    globalRules = cfg.rules || [];
-                    renderRules();
+                    globalRules = cfg.rules || []; renderRules();
                     document.getElementById('batch-count').value = cfg.batchCount || 100;
 
-                    // Restore Player
                     const p = cfg.player;
                     document.getElementById('p-hp').value = p.hp;
                     document.getElementById('p-atk').value = p.atk;
@@ -323,8 +354,8 @@
                     document.getElementById('p-stamina-regen').value = p.regen;
                     document.getElementById('p-normal-time').value = p.normTime;
                     document.getElementById('p-normal-cost').value = p.normCost;
+                    document.getElementById('p-normal-poise').value = p.normPoise || 10; // Load
 
-                    // Restore Boss
                     const b = cfg.boss;
                     document.getElementById('b-hp').value = b.hp;
                     document.getElementById('b-atk').value = b.atk;
@@ -332,6 +363,9 @@
                     document.getElementById('b-crit-rate').value = b.critRate;
                     document.getElementById('b-crit-dmg').value = b.critDmg;
                     document.getElementById('b-normal-time').value = b.normTime;
+                    document.getElementById('b-poise').value = b.poise || 100; // Load
+                    document.getElementById('b-groggy-time').value = b.groggyTime || 4.0; // Load
+                    document.getElementById('b-groggy-mult').value = b.groggyMult || 2.0; // Load
 
                     // Clear & Restore Slots
                     document.getElementById('p-attrs').innerHTML = '<h4 style="color:var(--attr-color)">Attr Slots</h4>';
@@ -345,9 +379,9 @@
                     if(b.attrs) b.attrs.forEach(d => addAttrSlot('b', d));
                     if(b.skills) b.skills.forEach(d => addSkillSlot('b', d));
 
-                    alert("설정을 성공적으로 불러왔습니다!");
+                    alert("설정 로드 완료!");
                 } catch(err) {
-                    alert("파일 형식이 올바르지 않습니다.");
+                    alert("파일 형식 오류.");
                     console.error(err);
                 }
             };
@@ -355,7 +389,7 @@
             input.value = '';
         }
 
-        // --- 2. Simulation Engine ---
+        // --- 2. Simulation Engine (Updated for Poise) ---
         class SimEntity {
             constructor(type) {
                 this.type = type;
@@ -366,19 +400,39 @@
                 this.critRate = parseFloat(document.getElementById(`${type}-crit-rate`).value);
                 this.critDmg = parseFloat(document.getElementById(`${type}-crit-dmg`).value);
                 this.normalTime = parseFloat(document.getElementById(`${type}-normal-time`)?.value || 1.5);
+                
                 this.attrs = [];
                 document.querySelectorAll(`#${type}-attrs .attr-slot`).forEach(s => {
                     this.attrs.push({ name: s.querySelector('.a-name').value.trim(), atkMod: s.querySelector('.a-atk').value/100, defMod: s.querySelector('.a-def').value/100 });
                 });
                 this.skills = [];
                 document.querySelectorAll(`#${type}-skills .skill-slot`).forEach(s => {
-                    this.skills.push({ name: s.querySelector('.s-name').value, dmg: s.querySelector('.s-dmg').value/100, time: parseFloat(s.querySelector('.s-time').value), cd: parseFloat(s.querySelector('.s-cd').value), cost: type==='p'?parseFloat(s.querySelector('.s-cost').value):0, readyAt: 0 });
+                    this.skills.push({ 
+                        name: s.querySelector('.s-name').value, 
+                        dmg: s.querySelector('.s-dmg').value/100, 
+                        time: parseFloat(s.querySelector('.s-time').value), 
+                        cd: parseFloat(s.querySelector('.s-cd').value), 
+                        cost: type==='p'?parseFloat(s.querySelector('.s-cost').value):0, 
+                        poise: type==='p'?parseFloat(s.querySelector('.s-poise').value):0, // Poise Dmg
+                        readyAt: 0 
+                    });
                 });
+
                 if(type==='p') {
                     this.stamina = parseFloat(document.getElementById('p-stamina').value);
                     this.maxStamina = this.stamina;
                     this.regen = parseFloat(document.getElementById('p-stamina-regen').value);
                     this.normalCost = parseFloat(document.getElementById('p-normal-cost').value);
+                    this.normalPoise = parseFloat(document.getElementById('p-normal-poise').value); // Normal Poise Dmg
+                }
+
+                if(type==='b') {
+                    this.maxPoise = parseFloat(document.getElementById('b-poise').value);
+                    this.currentPoise = this.maxPoise;
+                    this.groggyTime = parseFloat(document.getElementById('b-groggy-time').value);
+                    this.groggyMult = parseFloat(document.getElementById('b-groggy-mult').value);
+                    this.isGroggy = false;
+                    this.groggyEndTimer = 0;
                 }
                 this.busyUntil = 0;
             }
@@ -406,9 +460,23 @@
                     history.pHp.push(Math.max(0, p.hp));
                     history.bHp.push(Math.max(0, b.hp));
                 }
-                p.stamina = Math.min(p.maxStamina, p.stamina + (p.regen * tick));
                 
-                // Player Action
+                // --- Stamina Regen ---
+                p.stamina = Math.min(p.maxStamina, p.stamina + (p.regen * tick));
+
+                // --- Boss Groggy Logic ---
+                if(b.isGroggy) {
+                    // Check if recovered
+                    if(time >= b.groggyEndTimer) {
+                        b.isGroggy = false;
+                        b.currentPoise = b.maxPoise;
+                        if(logging) history.log.push(`[${time.toFixed(1)}s] <span class="log-recover">Boss Recovered from Groggy!</span>`);
+                    }
+                    // While groggy, Boss does NOT attack (busyUntil updated to keep him stuck)
+                    b.busyUntil = Math.max(b.busyUntil, time + tick); 
+                }
+                
+                // --- Player Action ---
                 if(time >= p.busyUntil) {
                     let action = null;
                     let readySkills = p.skills.filter(s => time >= s.readyAt && p.stamina >= s.cost).sort((x,y)=> y.dmg - x.dmg);
@@ -421,6 +489,7 @@
                         let cast = skill ? skill.time : p.normalTime;
                         let dmgMod = skill ? skill.dmg : 1.0;
                         let name = skill ? skill.name : '평타';
+                        let poiseDmg = skill ? skill.poise : p.normalPoise; // New
 
                         p.stamina -= cost;
                         p.busyUntil = time + cast;
@@ -431,14 +500,33 @@
                         let final = base * react.mult;
                         let isCrit = Math.random()*100 < p.critRate;
                         if(isCrit) final *= p.critDmg;
+
+                        // [Updated] Apply Groggy Multiplier
+                        let groggyText = "";
+                        if(b.isGroggy) {
+                            final *= b.groggyMult;
+                            groggyText = `[GROGGY x${b.groggyMult}]`;
+                        }
+
+                        // [Updated] Apply Poise Damage
+                        if(!b.isGroggy) {
+                            b.currentPoise -= poiseDmg;
+                            if(b.currentPoise <= 0) {
+                                b.isGroggy = true;
+                                b.groggyEndTimer = time + b.groggyTime;
+                                b.busyUntil = b.groggyEndTimer; // Stun boss
+                                if(logging) history.log.push(`[${time.toFixed(1)}s] <span class="log-groggy">BOSS STAGGERED! (Groggy for ${b.groggyTime}s)</span>`);
+                            }
+                        }
                         
                         b.hp -= Math.floor(final);
-                        if(logging) history.log.push(`[${time.toFixed(1)}s] P.${name}: ${isCrit?'CRIT!':''} ${Math.floor(final)} ${react.log}`);
+                        if(logging) history.log.push(`[${time.toFixed(1)}s] P.${name}: ${isCrit?'CRIT!':''} ${Math.floor(final)} ${react.log} ${groggyText}`);
                     }
                 }
 
-                // Boss Action
-                if(time >= b.busyUntil && b.hp > 0) {
+                // --- Boss Action ---
+                // Boss only acts if NOT Groggy
+                if(time >= b.busyUntil && b.hp > 0 && !b.isGroggy) {
                     let action = null;
                     let readySkills = b.skills.filter(s => time >= s.readyAt);
                     if(readySkills.length > 0 && Math.random()<0.6) action = {type:'skill', data:readySkills[0]};
