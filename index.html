@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Soul-Like Architect v4.5 (Final + Save/Load)</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --panel-color: #1e1e1e;
+            --text-color: #e0e0e0;
+            --accent-color: #d4af37;
+            --win-color: #15803d;
+            --attr-color: #3b82f6;
+            --crit-color: #ffd700;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1, h2, h3 { color: var(--accent-color); margin-bottom: 10px; }
+        
+        .container { display: flex; flex-wrap: wrap; gap: 20px; width: 100%; max-width: 1400px; justify-content: center; }
+        .panel { background-color: var(--panel-color); border: 1px solid #444; padding: 20px; border-radius: 8px; flex: 1; min-width: 350px; }
+        
+        .input-group { margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+        label { font-size: 0.9em; color: #aaa; }
+        input { background-color: #333; border: 1px solid #555; color: white; padding: 5px; width: 80px; text-align: right; }
+        input[type="text"] { text-align: left; width: 100px; }
+
+        .slot-container { margin-top: 15px; border-top: 1px solid #444; padding-top: 10px; }
+        .skill-slot { background: #252525; padding: 10px; margin-bottom: 5px; border-left: 3px solid var(--accent-color); }
+        .attr-slot { background: #1a202c; padding: 10px; margin-bottom: 5px; border-left: 3px solid var(--attr-color); }
+
+        button { background-color: var(--accent-color); color: #000; border: none; padding: 8px 16px; font-weight: bold; cursor: pointer; border-radius: 4px; margin-top: 5px; }
+        button.secondary { background-color: #444; color: white; }
+        button.attr-btn { background-color: var(--attr-color); color: white; }
+        button.analyze { background-color: #8b5cf6; color: white; width: 100%; padding: 15px; font-size: 1.1em; }
+        button.remove { background-color: #8b0000; color: white; padding: 2px 8px; font-size: 0.8em; float: right; }
+        button.file-btn { background-color: #059669; color: white; margin-left: 10px; }
+
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 15px; }
+        .stat-card { background: #2a2a2a; padding: 15px; text-align: center; border-radius: 6px; border: 1px solid #555; }
+        .stat-val { font-size: 1.5em; font-weight: bold; margin-bottom: 5px; }
+        .stat-label { font-size: 0.8em; color: #aaa; }
+
+        /* Graph & Tooltip */
+        .battle-arena { width: 100%; max-width: 1400px; margin-top: 10px; position: relative; }
+        #log-window { height: 200px; overflow-y: auto; background: #000; border: 1px solid var(--accent-color); padding: 10px; font-family: monospace; font-size: 0.9em; margin-bottom: 10px; }
+        
+        .graph-wrapper { position: relative; width: 100%; height: 350px; background: #0a0a0a; border: 1px solid #333; cursor: crosshair; }
+        canvas { width: 100%; height: 100%; display: block; }
+        
+        #graph-tooltip {
+            position: absolute; background: rgba(0, 0, 0, 0.9); border: 1px solid #fff; padding: 10px;
+            color: #fff; font-size: 0.9em; pointer-events: none; display: none; border-radius: 4px; z-index: 100;
+        }
+
+        .toolbar { width:100%; max-width:1400px; display:flex; justify-content:flex-end; margin-bottom:10px; }
+        .section-divider { width: 100%; height: 2px; background: #333; margin: 40px 0; }
+        .log-reaction { color: #60a5fa; font-weight: bold; }
+        .log-crit { color: var(--crit-color); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>소울 라이크 보스 전투 시뮬레이터</h1>
+
+    <div class="toolbar">
+        <input type="file" id="load-file" style="display: none;" accept=".json" onchange="loadConfig(this)">
+        <button class="file-btn" onclick="saveConfig()">💾 설정 저장 (Save JSON)</button>
+        <button class="file-btn" onclick="document.getElementById('load-file').click()">📂 설정 불러오기 (Load JSON)</button>
+    </div>
+
+    <div class="panel" style="width:100%; max-width:1400px; margin-bottom:20px;">
+        <h3>⚔️ World Rules (Global Element Matrix)</h3>
+        <div id="rule-container"></div>
+        <button class="secondary" onclick="addRule()">+ Add Rule</button>
+    </div>
+
+    <div class="container">
+        <div class="panel">
+            <h2>🛡️ Player</h2>
+            <div class="input-group"><label>HP / ATK / DEF</label>
+                <div>
+                    <input type="number" id="p-hp" value="1000">
+                    <input type="number" id="p-atk" value="120">
+                    <input type="number" id="p-def" value="40">
+                </div>
+            </div>
+            <div class="input-group"><label style="color:var(--crit-color)">Crit Rate(%) / Dmg(x)</label>
+                <div>
+                    <input type="number" id="p-crit-rate" value="25">
+                    <input type="number" id="p-crit-dmg" value="1.5" step="0.1">
+                </div>
+            </div>
+            <div class="input-group"><label>Stamina / Regen</label>
+                <div>
+                    <input type="number" id="p-stamina" value="150">
+                    <input type="number" id="p-stamina-regen" value="20">
+                </div>
+            </div>
+            <div class="input-group"><label>평타(초/소모)</label>
+                <div>
+                    <input type="number" id="p-normal-time" value="0.8">
+                    <input type="number" id="p-normal-cost" value="20">
+                </div>
+            </div>
+            <hr>
+            <div class="slot-container" id="p-attrs"><h4 style="color:var(--attr-color)">Attr Slots</h4></div>
+            <button class="attr-btn" onclick="addAttrSlot('p')">+ 속성 추가</button>
+            <div class="slot-container" id="p-skills"><h4>Skill Slots</h4></div>
+            <button class="secondary" onclick="addSkillSlot('p')">+ 스킬 추가</button>
+        </div>
+
+        <div class="panel">
+            <h2>☠️ Boss</h2>
+            <div class="input-group"><label>HP / ATK / DEF</label>
+                <div>
+                    <input type="number" id="b-hp" value="6000">
+                    <input type="number" id="b-atk" value="280">
+                    <input type="number" id="b-def" value="60">
+                </div>
+            </div>
+            <div class="input-group"><label style="color:var(--crit-color)">Crit Rate(%) / Dmg(x)</label>
+                <div>
+                    <input type="number" id="b-crit-rate" value="10">
+                    <input type="number" id="b-crit-dmg" value="2.0" step="0.1">
+                </div>
+            </div>
+            <div class="input-group"><label>평타속도(s)</label><input type="number" id="b-normal-time" value="1.5"></div>
+            <hr>
+            <div class="slot-container" id="b-attrs"><h4 style="color:var(--attr-color)">Attr Slots</h4></div>
+            <button class="attr-btn" onclick="addAttrSlot('b')">+ 속성 추가</button>
+            <div class="slot-container" id="b-skills"><h4>Skill Slots</h4></div>
+            <button class="secondary" onclick="addSkillSlot('b')">+ 스킬 추가</button>
+        </div>
+    </div>
+
+    <div style="width:100%; max-width:1400px; margin-top:30px;">
+        
+        <h3 style="border-bottom: 1px solid #444; padding-bottom: 5px;">🎬 단판 관전 (Visual & Graph)</h3>
+        <button class="secondary" style="width:100%; margin-bottom:15px; padding:15px; font-size:1.1em;" onclick="runSingleBattle()">▶️ 전투 시작</button>
+        
+        <div id="visual-arena" class="battle-arena" style="display:none;">
+            <div id="log-window"></div>
+            <div class="graph-wrapper">
+                <canvas id="singleGraph"></canvas>
+            </div>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <h3 style="border-bottom: 1px solid #444; padding-bottom: 5px;">📊 밸런스 데이터 분석 (Data Only)</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <span style="color:#aaa;">대량 시뮬레이션을 통해 승률과 밸런스를 검증합니다.</span>
+            <div class="input-group" style="gap:10px;">
+                <label style="font-size:1em; color:#fff;">반복 횟수:</label>
+                <input type="number" id="batch-count" value="100" style="width:100px; font-size:1em;">
+            </div>
+        </div>
+        
+        <button class="analyze" onclick="runBatchSimulation()">🚀 데이터 분석 실행</button>
+
+        <div id="analysis-result" style="display:none; margin-top:20px;" class="panel">
+            <div class="stats-grid">
+                <div class="stat-card" style="border-color: var(--win-color);">
+                    <div class="stat-val" id="stat-win-rate" style="color: var(--win-color);">0%</div>
+                    <div class="stat-label">승률</div>
+                </div>
+                <div class="stat-card" style="border-color: gold;">
+                    <div class="stat-val" id="stat-clutch-rate" style="color: gold;">0%</div>
+                    <div class="stat-label">극적 승리 (HP<20%)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-val" id="stat-avg-time">0s</div>
+                    <div class="stat-label">평균 전투 시간</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-val" id="stat-turn-count">0</div>
+                    <div class="stat-label">총 시뮬레이션</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="graph-tooltip"></div>
+
+    <script>
+        // --- 0. Global & Init ---
+        let globalRules = [];
+        let counters = { p_sk:0, b_sk:0, p_at:0, b_at:0 };
+
+        function renderRules() {
+            const con = document.getElementById('rule-container');
+            con.innerHTML = '';
+            globalRules.forEach((r, i) => {
+                const d = document.createElement('div');
+                d.className = 'input-group';
+                d.style.justifyContent = 'flex-start'; d.style.gap = '10px';
+                d.innerHTML = `<input type="text" value="${r.atk}" onchange="globalRules[${i}].atk=this.value"><span style="color:#888;">></span><input type="text" value="${r.def}" onchange="globalRules[${i}].def=this.value"><button class="remove" onclick="globalRules.splice(${i},1); renderRules()">X</button>`;
+                con.appendChild(d);
+            });
+        }
+        function addRule(data=null) { 
+            globalRules.push(data ? data : {atk:'', def:''}); 
+            renderRules(); 
+        }
+
+        // [Updated] 데이터 주입 가능하도록 수정
+        function addSkillSlot(target, data=null) {
+            counters[target+'_sk']++;
+            const div = document.createElement('div');
+            div.className = 'skill-slot';
+            const costHtml = target==='p' ? `<div class="input-group"><label>Stamina</label><input type="number" class="s-cost" value="${data?data.cost:40}"></div>` : '';
+            div.innerHTML = `<div><strong>Skill ${counters[target+'_sk']}</strong><button class="remove" onclick="this.parentElement.parentElement.remove()">X</button></div><div class="input-group"><label>Name</label><input type="text" class="s-name" value="${data?data.name:'Skill'}"></div><div class="input-group"><label>Dmg(%)</label><input type="number" class="s-dmg" value="${data?(data.dmg*100):150}"></div><div class="input-group"><label>Time(s)</label><input type="number" class="s-time" value="${data?data.time:1.5}"></div><div class="input-group"><label>CD(s)</label><input type="number" class="s-cd" value="${data?data.cd:5}"></div>${costHtml}`;
+            document.getElementById(`${target}-skills`).appendChild(div);
+        }
+
+        // [Updated] 데이터 주입 가능하도록 수정
+        function addAttrSlot(target, data=null) {
+            counters[target+'_at']++;
+            const div = document.createElement('div');
+            div.className = 'attr-slot';
+            const defName = target === 'p' ? '불' : '풀';
+            div.innerHTML = `<div><strong>Attr ${counters[target+'_at']}</strong><button class="remove" onclick="this.parentElement.parentElement.remove()">X</button></div><div class="input-group"><label>속성명</label><input type="text" class="a-name" value="${data?data.name:defName}"></div><div class="input-group"><label>공격보너스(%)</label><input type="number" class="a-atk" value="${data?(data.atkMod*100):50}"></div><div class="input-group"><label>방어저항(%)</label><input type="number" class="a-def" value="${data?(data.defMod*100):30}"></div>`;
+            document.getElementById(`${target}-attrs`).appendChild(div);
+        }
+
+        // --- 1. Save & Load System ---
+
+        function getSlotsData(target, type) {
+            let data = [];
+            if(type === 'skill') {
+                document.querySelectorAll(`#${target}-skills .skill-slot`).forEach(s => {
+                    data.push({
+                        name: s.querySelector('.s-name').value,
+                        dmg: parseFloat(s.querySelector('.s-dmg').value)/100,
+                        time: parseFloat(s.querySelector('.s-time').value),
+                        cd: parseFloat(s.querySelector('.s-cd').value),
+                        cost: target==='p' ? parseFloat(s.querySelector('.s-cost').value) : 0
+                    });
+                });
+            } else {
+                document.querySelectorAll(`#${target}-attrs .attr-slot`).forEach(s => {
+                    data.push({
+                        name: s.querySelector('.a-name').value,
+                        atkMod: parseFloat(s.querySelector('.a-atk').value)/100,
+                        defMod: parseFloat(s.querySelector('.a-def').value)/100
+                    });
+                });
+            }
+            return data;
+        }
+
+        function saveConfig() {
+            const config = {
+                rules: globalRules,
+                batchCount: document.getElementById('batch-count').value,
+                player: {
+                    hp: document.getElementById('p-hp').value,
+                    atk: document.getElementById('p-atk').value,
+                    def: document.getElementById('p-def').value,
+                    critRate: document.getElementById('p-crit-rate').value,
+                    critDmg: document.getElementById('p-crit-dmg').value,
+                    stamina: document.getElementById('p-stamina').value,
+                    regen: document.getElementById('p-stamina-regen').value,
+                    normTime: document.getElementById('p-normal-time').value,
+                    normCost: document.getElementById('p-normal-cost').value,
+                    attrs: getSlotsData('p', 'attr'),
+                    skills: getSlotsData('p', 'skill')
+                },
+                boss: {
+                    hp: document.getElementById('b-hp').value,
+                    atk: document.getElementById('b-atk').value,
+                    def: document.getElementById('b-def').value,
+                    critRate: document.getElementById('b-crit-rate').value,
+                    critDmg: document.getElementById('b-crit-dmg').value,
+                    normTime: document.getElementById('b-normal-time').value,
+                    attrs: getSlotsData('b', 'attr'),
+                    skills: getSlotsData('b', 'skill')
+                }
+            };
+
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(config, null, 2));
+            const dlAnchor = document.createElement('a');
+            dlAnchor.setAttribute("href", dataStr);
+            dlAnchor.setAttribute("download", "soul_combat_config.json");
+            document.body.appendChild(dlAnchor);
+            dlAnchor.click();
+            dlAnchor.remove();
+        }
+
+        function loadConfig(input) {
+            const file = input.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const cfg = JSON.parse(e.target.result);
+                    
+                    // Restore Global
+                    globalRules = cfg.rules || [];
+                    renderRules();
+                    document.getElementById('batch-count').value = cfg.batchCount || 100;
+
+                    // Restore Player
+                    const p = cfg.player;
+                    document.getElementById('p-hp').value = p.hp;
+                    document.getElementById('p-atk').value = p.atk;
+                    document.getElementById('p-def').value = p.def;
+                    document.getElementById('p-crit-rate').value = p.critRate;
+                    document.getElementById('p-crit-dmg').value = p.critDmg;
+                    document.getElementById('p-stamina').value = p.stamina;
+                    document.getElementById('p-stamina-regen').value = p.regen;
+                    document.getElementById('p-normal-time').value = p.normTime;
+                    document.getElementById('p-normal-cost').value = p.normCost;
+
+                    // Restore Boss
+                    const b = cfg.boss;
+                    document.getElementById('b-hp').value = b.hp;
+                    document.getElementById('b-atk').value = b.atk;
+                    document.getElementById('b-def').value = b.def;
+                    document.getElementById('b-crit-rate').value = b.critRate;
+                    document.getElementById('b-crit-dmg').value = b.critDmg;
+                    document.getElementById('b-normal-time').value = b.normTime;
+
+                    // Clear & Restore Slots
+                    document.getElementById('p-attrs').innerHTML = '<h4 style="color:var(--attr-color)">Attr Slots</h4>';
+                    document.getElementById('p-skills').innerHTML = '<h4>Skill Slots</h4>';
+                    document.getElementById('b-attrs').innerHTML = '<h4 style="color:var(--attr-color)">Attr Slots</h4>';
+                    document.getElementById('b-skills').innerHTML = '<h4>Skill Slots</h4>';
+                    counters = { p_sk:0, b_sk:0, p_at:0, b_at:0 };
+
+                    if(p.attrs) p.attrs.forEach(d => addAttrSlot('p', d));
+                    if(p.skills) p.skills.forEach(d => addSkillSlot('p', d));
+                    if(b.attrs) b.attrs.forEach(d => addAttrSlot('b', d));
+                    if(b.skills) b.skills.forEach(d => addSkillSlot('b', d));
+
+                    alert("설정을 성공적으로 불러왔습니다!");
+                } catch(err) {
+                    alert("파일 형식이 올바르지 않습니다.");
+                    console.error(err);
+                }
+            };
+            reader.readAsText(file);
+            input.value = '';
+        }
+
+        // --- 2. Simulation Engine ---
+        class SimEntity {
+            constructor(type) {
+                this.type = type;
+                this.hp = parseFloat(document.getElementById(`${type}-hp`).value);
+                this.maxHp = this.hp;
+                this.atk = parseFloat(document.getElementById(`${type}-atk`).value);
+                this.def = parseFloat(document.getElementById(`${type}-def`).value);
+                this.critRate = parseFloat(document.getElementById(`${type}-crit-rate`).value);
+                this.critDmg = parseFloat(document.getElementById(`${type}-crit-dmg`).value);
+                this.normalTime = parseFloat(document.getElementById(`${type}-normal-time`)?.value || 1.5);
+                this.attrs = [];
+                document.querySelectorAll(`#${type}-attrs .attr-slot`).forEach(s => {
+                    this.attrs.push({ name: s.querySelector('.a-name').value.trim(), atkMod: s.querySelector('.a-atk').value/100, defMod: s.querySelector('.a-def').value/100 });
+                });
+                this.skills = [];
+                document.querySelectorAll(`#${type}-skills .skill-slot`).forEach(s => {
+                    this.skills.push({ name: s.querySelector('.s-name').value, dmg: s.querySelector('.s-dmg').value/100, time: parseFloat(s.querySelector('.s-time').value), cd: parseFloat(s.querySelector('.s-cd').value), cost: type==='p'?parseFloat(s.querySelector('.s-cost').value):0, readyAt: 0 });
+                });
+                if(type==='p') {
+                    this.stamina = parseFloat(document.getElementById('p-stamina').value);
+                    this.maxStamina = this.stamina;
+                    this.regen = parseFloat(document.getElementById('p-stamina-regen').value);
+                    this.normalCost = parseFloat(document.getElementById('p-normal-cost').value);
+                }
+                this.busyUntil = 0;
+            }
+        }
+
+        function calculateReaction(atk, def) {
+            let mult = 1.0; let log = [];
+            atk.attrs.forEach(a => {
+                def.attrs.forEach(d => {
+                    if(globalRules.some(r => r.atk===a.name && r.def===d.name)) { mult *= (1+a.atkMod); log.push(`[${a.name}>${d.name}↑]`); }
+                    if(globalRules.some(r => r.atk===d.name && r.def===a.name)) { mult *= (1-d.defMod); log.push(`[${d.name}>${a.name}↓]`); }
+                });
+            });
+            return { mult, log: log.join(' ') };
+        }
+
+        function simulateBattle(logging = false) {
+            const p = new SimEntity('p'); const b = new SimEntity('b');
+            let time = 0; const tick = 0.2; const limit = 300;
+            const history = { time:[], pHp:[], bHp:[], log:[] };
+            
+            while(p.hp > 0 && b.hp > 0 && time < limit) {
+                if(time % 1.0 < tick) {
+                    history.time.push(time.toFixed(1));
+                    history.pHp.push(Math.max(0, p.hp));
+                    history.bHp.push(Math.max(0, b.hp));
+                }
+                p.stamina = Math.min(p.maxStamina, p.stamina + (p.regen * tick));
+                
+                // Player Action
+                if(time >= p.busyUntil) {
+                    let action = null;
+                    let readySkills = p.skills.filter(s => time >= s.readyAt && p.stamina >= s.cost).sort((x,y)=> y.dmg - x.dmg);
+                    if(readySkills.length > 0) action = { type:'skill', data:readySkills[0] };
+                    else if(p.stamina >= p.normalCost) action = { type:'normal' };
+
+                    if(action) {
+                        let skill = action.type==='skill' ? action.data : null;
+                        let cost = skill ? skill.cost : p.normalCost;
+                        let cast = skill ? skill.time : p.normalTime;
+                        let dmgMod = skill ? skill.dmg : 1.0;
+                        let name = skill ? skill.name : '평타';
+
+                        p.stamina -= cost;
+                        p.busyUntil = time + cast;
+                        if(skill) skill.readyAt = time + skill.cd;
+
+                        let base = Math.max((p.atk*dmgMod)-b.def, p.atk*0.05);
+                        let react = calculateReaction(p, b);
+                        let final = base * react.mult;
+                        let isCrit = Math.random()*100 < p.critRate;
+                        if(isCrit) final *= p.critDmg;
+                        
+                        b.hp -= Math.floor(final);
+                        if(logging) history.log.push(`[${time.toFixed(1)}s] P.${name}: ${isCrit?'CRIT!':''} ${Math.floor(final)} ${react.log}`);
+                    }
+                }
+
+                // Boss Action
+                if(time >= b.busyUntil && b.hp > 0) {
+                    let action = null;
+                    let readySkills = b.skills.filter(s => time >= s.readyAt);
+                    if(readySkills.length > 0 && Math.random()<0.6) action = {type:'skill', data:readySkills[0]};
+                    else action = {type:'normal'};
+
+                    let skill = action.type==='skill' ? action.data : null;
+                    let cast = skill ? skill.time : b.normalTime;
+                    let dmgMod = skill ? skill.dmg : 1.0;
+                    let name = skill ? skill.name : '평타';
+
+                    b.busyUntil = time + cast;
+                    if(skill) skill.readyAt = time + skill.cd;
+
+                    let base = Math.max((b.atk*dmgMod)-p.def, b.atk*0.05);
+                    let react = calculateReaction(b, p);
+                    let final = base * react.mult;
+                    let isCrit = Math.random()*100 < b.critRate;
+                    if(isCrit) final *= b.critDmg;
+
+                    p.hp -= Math.floor(final);
+                    if(logging) history.log.push(`[${time.toFixed(1)}s] B.${name}: ${isCrit?'CRIT!':''} ${Math.floor(final)} ${react.log}`);
+                }
+                time += tick;
+            }
+            return { winner: p.hp>0?'Player':'Boss', duration: time, pRemainingHp: p.hp, pMaxHp: p.maxHp, bMaxHp: b.maxHp, history };
+        }
+
+        // --- 3. Interactive Graph ---
+        function drawInteractiveGraph(canvasId, history, pMaxHp, bMaxHp) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            const tooltip = document.getElementById('graph-tooltip');
+            
+            canvas.width = canvas.parentElement.offsetWidth;
+            canvas.height = canvas.parentElement.offsetHeight;
+            const w = canvas.width; const h = canvas.height;
+            const pad = 30;
+            
+            const dataLen = history.time.length;
+            const xStep = (w - pad*2) / (dataLen - 1);
+
+            function drawLine(data, color, maxVal) {
+                ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 2;
+                data.forEach((v, i) => {
+                    let x = pad + i * xStep;
+                    let y = (h - pad) - (v / maxVal * (h - pad*2));
+                    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+                });
+                ctx.stroke();
+            }
+
+            const drawBase = () => {
+                ctx.fillStyle = "#0a0a0a"; ctx.fillRect(0,0,w,h);
+                ctx.strokeStyle = "#333"; ctx.lineWidth=1; ctx.beginPath();
+                ctx.moveTo(pad, pad); ctx.lineTo(pad, h-pad);
+                ctx.moveTo(pad, h-pad); ctx.lineTo(w-pad, h-pad);
+                ctx.stroke();
+                drawLine(history.bHp, '#666', bMaxHp);
+                drawLine(history.pHp, '#b91c1c', pMaxHp);
+            };
+            drawBase();
+
+            canvas.onmousemove = (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left - pad;
+                let index = Math.round(mouseX / xStep);
+                if(index < 0) index = 0; if(index >= dataLen) index = dataLen - 1;
+
+                drawBase();
+                const xPos = pad + index * xStep;
+                ctx.strokeStyle = "#fff"; ctx.setLineDash([5, 5]); ctx.lineWidth=1;
+                ctx.beginPath(); ctx.moveTo(xPos, pad); ctx.lineTo(xPos, h-pad); ctx.stroke();
+                ctx.setLineDash([]);
+
+                tooltip.style.display = 'block';
+                tooltip.style.left = (e.pageX + 15) + 'px';
+                tooltip.style.top = (e.pageY + 15) + 'px';
+                
+                tooltip.innerHTML = `
+                    <div>⏱️ Time: ${history.time[index]}s</div>
+                    <div style="color:#ff6b6b">🛡️ Player: ${Math.floor(history.pHp[index])} / ${pMaxHp}</div>
+                    <div style="color:#aaa">☠️ Boss: ${Math.floor(history.bHp[index])} / ${bMaxHp}</div>
+                `;
+            };
+            canvas.onmouseleave = () => { tooltip.style.display = 'none'; drawBase(); };
+        }
+
+        // --- 4. Controls ---
+        function runBatchSimulation() {
+            document.getElementById('analysis-result').style.display = 'block';
+            const ITER = parseInt(document.getElementById('batch-count').value) || 100;
+            let wins=0, clutch=0, totalTime=0;
+
+            for(let i=0; i<ITER; i++) {
+                const res = simulateBattle(false);
+                if(res.winner==='Player') {
+                    wins++;
+                    if((res.pRemainingHp/res.pMaxHp)<0.2) clutch++;
+                }
+                totalTime += res.duration;
+            }
+
+            document.getElementById('stat-win-rate').innerText = `${((wins/ITER)*100).toFixed(1)}%`;
+            document.getElementById('stat-clutch-rate').innerText = wins>0 ? `${((clutch/wins)*100).toFixed(1)}%` : '0%';
+            document.getElementById('stat-avg-time').innerText = `${(totalTime/ITER).toFixed(1)}s`;
+            document.getElementById('stat-turn-count').innerText = `${ITER}회`;
+        }
+
+        function runSingleBattle() {
+            document.getElementById('visual-arena').style.display = 'block';
+            const res = simulateBattle(true);
+            const logWin = document.getElementById('log-window');
+            logWin.innerHTML = res.history.log.map(l=>`<div>${l}</div>`).join('');
+            logWin.innerHTML += `<div style="color:${res.winner==='Player'?'lime':'red'}; font-weight:bold; margin-top:10px;">RESULT: ${res.winner} WIN!</div>`;
+            logWin.scrollTop = logWin.scrollHeight;
+
+            drawInteractiveGraph('singleGraph', res.history, res.pMaxHp, res.bMaxHp);
+        }
+
+        window.onload = function() {
+            // Default Init
+            globalRules = [{atk:'불',def:'풀'}, {atk:'불',def:'얼음'}, {atk:'물',def:'불'}, {atk:'풀',def:'물'}, {atk:'신성',def:'어둠'}];
+            renderRules();
+            addAttrSlot('p'); addAttrSlot('b'); addAttrSlot('b');
+            document.querySelector('#b-attrs .attr-slot:nth-child(3) .a-name').value = '얼음';
+        }
+    </script>
+</body>
+</html>
